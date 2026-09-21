@@ -170,6 +170,9 @@ navigation:
               - page: HuggingFace Classifier
                 path: configure-rails/guardrail-catalog/community/hf-classifier.mdx
                 slug: hf-classifier
+              - page: Jev
+                path: configure-rails/guardrail-catalog/community/jev.mdx
+                slug: jev
               - page: Llama Guard
                 path: configure-rails/guardrail-catalog/community/llama-guard.mdx
                 slug: llama-guard

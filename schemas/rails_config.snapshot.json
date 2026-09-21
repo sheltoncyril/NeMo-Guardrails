@@ -610,6 +610,100 @@
       "title": "JailbreakDetectionConfig",
       "type": "object"
     },
+    "JevDetection": {
+      "additionalProperties": false,
+      "description": "Configuration for the Jev (TypeSafe AI) rail.",
+      "properties": {
+        "fail_open": {
+          "default": false,
+          "description": "If true, allow the text when Jev cannot be reached. Default is to fail closed and block.",
+          "title": "Fail Open",
+          "type": "boolean"
+        },
+        "input": {
+          "$ref": "#/$defs/JevDetectionOptions",
+          "description": "Questions asked about the user input."
+        },
+        "model": {
+          "default": "jev-latest",
+          "description": "The Jev model to use. Pin a version for reproducibility.",
+          "title": "Model",
+          "type": "string"
+        },
+        "output": {
+          "$ref": "#/$defs/JevDetectionOptions",
+          "description": "Questions asked about the bot output."
+        },
+        "server_endpoint": {
+          "default": "https://api.typesafe.ai/v1/systemone",
+          "description": "The TypeSafe System One endpoint. The API key is read from TYPESAFE_API_KEY.",
+          "title": "Server Endpoint",
+          "type": "string"
+        },
+        "threshold": {
+          "default": 0.5,
+          "description": "Default probability at or above which a question blocks the text.",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Threshold",
+          "type": "number"
+        },
+        "timeout": {
+          "default": 10.0,
+          "description": "Per-request timeout in seconds.",
+          "exclusiveMinimum": 0,
+          "title": "Timeout",
+          "type": "number"
+        }
+      },
+      "title": "JevDetection",
+      "type": "object"
+    },
+    "JevDetectionOptions": {
+      "additionalProperties": false,
+      "description": "Per-direction (input / output) options for Jev.",
+      "properties": {
+        "questions": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JevQuestion"
+          },
+          "description": "Noul questions to ask about the text, keyed by an identifier. The text is blocked if any answer probability reaches its threshold.",
+          "title": "Questions",
+          "type": "object"
+        }
+      },
+      "title": "JevDetectionOptions",
+      "type": "object"
+    },
+    "JevQuestion": {
+      "additionalProperties": false,
+      "description": "A single Noul (yes/no) question asked of Jev about the text.",
+      "properties": {
+        "instructions": {
+          "description": "The yes/no question to ask Jev about the text.",
+          "title": "Instructions",
+          "type": "string"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Per-question block threshold in [0, 1]. Falls back to the rail-level threshold when unset.",
+          "title": "Threshold"
+        }
+      },
+      "required": [
+        "instructions"
+      ],
+      "title": "JevQuestion",
+      "type": "object"
+    },
     "LocalHFClassifierConfig": {
       "description": "Configuration for a local HuggingFace Transformers pipeline classifier.",
       "properties": {
@@ -1272,6 +1366,17 @@
         }
       ],
       "description": "Configuration for jailbreak detection."
+    },
+    "jev": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/JevDetection"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Configuration for the Jev (TypeSafe AI) rail."
     },
     "pangea": {
       "anyOf": [

@@ -427,6 +427,8 @@ _KNOWN_BUILTIN_FLOWS = {
     "injection detection": "injection_detection",
     "jailbreak detection heuristics": "jailbreak_detection",
     "jailbreak detection model": "jailbreak_detection",
+    "jev check input": "jev",
+    "jev check output": "jev",
     "llama guard check input": "llama_guard",
     "llama guard check output": "llama_guard",
     "mask pii on input": "sensitive_data_detection",

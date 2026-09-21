@@ -1,0 +1,35 @@
+"""
+Jev (TypeSafe AI) Integration Flows (Colang 2.x)
+
+Jev is a hosted System One model that answers typed yes/no questions with
+calibrated probabilities. The questions and thresholds are configured under
+`rails.config.jev`; the API key is read from TYPESAFE_API_KEY.
+
+Supported features:
+- Input checks: ask the configured questions about the user message
+- Output checks: ask the configured questions about the bot response
+"""
+
+flow jev check input
+  """Guardrail based on Jev answers to the configured input questions."""
+  global $user_message
+  $result = await JevCheckAction(source="input", text=$user_message)
+
+  if $result.is_blocked
+    if $system.config.enable_rails_exceptions
+      send JevCheckRailException(message="Jev check triggered on input: " + $result.reason)
+    else
+      bot refuse to respond
+    abort
+
+flow jev check output
+  """Guardrail based on Jev answers to the configured output questions."""
+  global $bot_message
+  $result = await JevCheckAction(source="output", text=$bot_message)
+
+  if $result.is_blocked
+    if $system.config.enable_rails_exceptions
+      send JevCheckRailException(message="Jev check triggered on output: " + $result.reason)
+    else
+      bot refuse to respond
+    abort

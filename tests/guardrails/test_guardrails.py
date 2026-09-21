@@ -2105,6 +2105,7 @@ class TestScopeGateCharacterization:
             ("input", "guardrailsai check input"),
             ("input", "hf classifier check input"),
             ("input", "jailbreak detection model"),
+            ("input", "jev check input"),
             ("input", "llama guard check input"),
             ("input", "mask pii on input"),
             ("input", "mask sensitive data on input"),
@@ -2134,6 +2135,7 @@ class TestScopeGateCharacterization:
             ("output", "guardrailsai check output"),
             ("output", "hf classifier check output"),
             ("output", "injection detection"),
+            ("output", "jev check output"),
             ("output", "llama guard check output"),
             ("output", "mask pii on output"),
             ("output", "mask sensitive data on output"),
@@ -2160,7 +2162,7 @@ class TestScopeGateCharacterization:
         return IORails._unservable_rails_reason([flow], direction, deps)
 
     def test_the_admitted_surfaces_are_exactly_the_pinned_set(self):
-        """Every catalog surface in scope is one of the 59 named here, and vice versa."""
+        """Every catalog surface in scope is one of the 61 named here, and vice versa."""
         admitted = {
             (direction.value, name)
             for direction in (SurfaceDirection.INPUT, SurfaceDirection.OUTPUT)
