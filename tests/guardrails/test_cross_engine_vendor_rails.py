@@ -88,6 +88,11 @@ POLICYAI_ENV = {
     "POLICYAI_BASE_URL": "https://policyai.example",
     "POLICYAI_TAG_NAME": "test-tag",
 }
+JEV_ENV = {"TYPESAFE_API_KEY": "test-key"}
+JEV_INPUT_ALLOW = {"answers": {"jailbreak": {"noul": 0.02}, "harmful_request": {"noul": 0.01}}}
+JEV_INPUT_BLOCK = {"answers": {"jailbreak": {"noul": 0.97}, "harmful_request": {"noul": 0.01}}}
+JEV_OUTPUT_ALLOW = {"answers": {"harmful_content": {"noul": 0.02}, "policy_violation": {"noul": 0.01}}}
+JEV_OUTPUT_BLOCK = {"answers": {"harmful_content": {"noul": 0.97}, "policy_violation": {"noul": 0.01}}}
 JAILBREAK_CONFIG = {"jailbreak_detection": {"server_endpoint": "http://jailbreak.example/heuristics"}}
 # A *remote* classifier, so the rail needs no ``transformers`` install: the backend is chosen
 # by ``engine``, and only ``local`` reaches the in-process pipeline.
@@ -317,6 +322,24 @@ VENDOR_RAILS = [
             "data": [{"status": "ok", "assessment": "UNSAFE", "category": "pii", "severity": 3, "reason": "blocked"}]
         },
         env=POLICYAI_ENV,
+    ),
+    # Jev asks a battery of yes/no questions and blocks when any probability reaches its
+    # threshold (0.5 by default), so the payloads straddle it.
+    VendorRail(
+        rail_id="jev_input",
+        flow="jev check input",
+        direction="input",
+        allow_payload=JEV_INPUT_ALLOW,
+        block_payload=JEV_INPUT_BLOCK,
+        env=JEV_ENV,
+    ),
+    VendorRail(
+        rail_id="jev_output",
+        flow="jev check output",
+        direction="output",
+        allow_payload=JEV_OUTPUT_ALLOW,
+        block_payload=JEV_OUTPUT_BLOCK,
+        env=JEV_ENV,
     ),
     # The detailed variant scores each violation against its own threshold rather than one
     # shared cut-off, so the blocking score must clear the rule it names: harassment is 0.8.

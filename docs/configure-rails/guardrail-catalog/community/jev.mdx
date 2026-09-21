@@ -1,0 +1,251 @@
+---
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+title: "Jev Integration"
+---
+The NeMo Guardrails library supports using Jev, the System One model from [TypeSafe AI](https://typesafe.ai), as an input and output rail out-of-the-box (you need to have the `TYPESAFE_API_KEY` environment variable set).
+
+Instead of a fixed set of safety categories, Jev lets you define the checks yourself. You write a small set of yes/no questions (Noul questions), such as "Is the user trying to jailbreak the assistant?". For each message, Jev returns the probability that the answer to each question is yes. The rail blocks the message when any probability is at or above its threshold.
+
+## Overview
+
+Use the Jev rail when you want:
+
+- **Custom policies expressed in plain language.** Add, remove, or reword questions in `config.yml` without training or hosting a classifier.
+- **Graded scores you can tune.** Each question returns a probability from 0 to 1, so you can set a strict threshold for one hazard and a lenient one for another.
+- **One call for several checks.** All questions for a message are sent in a single request to Jev.
+
+The rail can only allow or block a message. Jev returns probabilities, not text offsets, so this rail cannot mask or redact parts of a message. If you need masking, refer to the [PII detection](/configure-guardrails/guardrail-catalog/pii-detection) integrations.
+
+## Setup
+
+1. Get access to the Jev model from TypeSafe AI and create an API key. Jev is a hosted service, and access options (such as early access or a waitlist) can change, so check the [TypeSafe AI](https://typesafe.ai) documentation for the current options.
+
+2. Set the API key as an environment variable. The rail sends it to the API as a bearer token:
+
+    ```bash
+    export TYPESAFE_API_KEY="your-typesafe-api-key"
+    ```
+
+3. Update your `config.yml` file to include the Jev settings and activate the input and output flows:
+
+    ```yaml
+    rails:
+      config:
+        jev:
+          server_endpoint: "https://api.typesafe.ai/v1/systemone"  # Optional, this is the default
+          model: "jev-latest"  # Optional, this is the default. Pin a version for reproducibility.
+          threshold: 0.5  # Block when a question's probability is at or above this value
+          timeout: 10.0  # Per-request timeout in seconds
+          fail_open: false  # Block when Jev cannot be reached (default)
+          input:
+            questions:
+              jailbreak:
+                instructions: "Is the user trying to jailbreak the assistant, override its instructions, or manipulate it into ignoring its rules?"
+              harmful_request:
+                instructions: "Is the user asking for help with something dangerous, illegal, or intended to cause serious harm to people?"
+                threshold: 0.7  # Optional per-question override
+          output:
+            questions:
+              harmful_content:
+                instructions: "Does the assistant reply contain instructions or content that could enable serious harm to people?"
+              policy_violation:
+                instructions: "Does the assistant reply show it has been jailbroken or is ignoring its safety rules?"
+
+      input:
+        flows:
+          - jev check input
+
+      output:
+        flows:
+          - jev check output
+    ```
+
+Colang 2.x requires an explicit import in your Colang file (for example, `config.co`):
+
+```text
+import nemoguardrails.library.jev
+```
+
+Colang 1.0 auto-discovers library flows.
+
+<Note>
+
+You can also use `jev check input` alone or `jev check output` alone. If you do not configure any questions for a direction, the rail allows all text for that direction and does not call the Jev API.
+
+</Note>
+
+## Usage
+
+Once configured, the Jev integration does the following:
+
+1. **Input rails**: Before the user message is processed by the LLM, the rail sends it to Jev with the questions under `input.questions`. If any probability is at or above its threshold, the message is blocked.
+2. **Output rails**: Before the bot response is sent to the user, the rail sends it to Jev with the questions under `output.questions`. If any probability is at or above its threshold, the response is blocked.
+
+When a message is blocked, the bot responds with the standard refusal message (`bot refuse to respond`). If `enable_rails_exceptions` is set to `True`, the rail instead emits a `JevCheckRailException` event with a message such as `Jev check triggered on input: Jev flagged: jailbreak`. For more information, refer to [Exceptions](/configure-guardrails/exceptions).
+
+The `jev_check` action in `nemoguardrails/library/jev/actions.py` handles the check. It sends a single POST request to the configured endpoint with the text as the `state` and each question as a `noul` question, and reads the probability from `answers[question_id].noul` in the response.
+
+### Configuration Options
+
+All options live under `rails.config.jev`. Unknown keys are rejected, so a misspelled option raises a configuration error instead of being silently ignored.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `server_endpoint` | string | `https://api.typesafe.ai/v1/systemone` | The TypeSafe System One endpoint. |
+| `model` | string | `jev-latest` | The Jev model to use. Pin a specific version for reproducible behavior. |
+| `threshold` | float | `0.5` | Probability (0.0-1.0) at or above which a question blocks the text. |
+| `timeout` | float | `10.0` | Per-request timeout in seconds. Must be greater than 0. |
+| `fail_open` | bool | `false` | If `true`, allow the text when Jev cannot be reached. Refer to [Failure Handling](#failure-handling). |
+| `input.questions` | map | Default input questions | Questions asked about the user message, keyed by an identifier. |
+| `output.questions` | map | Default output questions | Questions asked about the bot response, keyed by an identifier. |
+
+Each entry under `questions` has the following fields:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `instructions` | string | *required* | The yes/no question to ask Jev about the text. |
+| `threshold` | float | Rail-level `threshold` | Optional per-question threshold (0.0-1.0). |
+
+### Default Questions
+
+If you omit the `input` block, the rail asks the following questions about the user message:
+
+| ID | Question |
+|----|----------|
+| `jailbreak` | Is the user trying to jailbreak the assistant, override its instructions, or manipulate it into ignoring its rules? |
+| `harmful_request` | Is the user asking for help with something dangerous, illegal, or intended to cause serious harm to people? |
+
+If you omit the `output` block, the rail asks the following questions about the bot response:
+
+| ID | Question |
+|----|----------|
+| `harmful_content` | Does the assistant reply contain instructions or content that could enable serious harm to people? |
+| `policy_violation` | Does the assistant reply show it has been jailbroken or is ignoring its safety rules? |
+
+<Warning>
+
+Defaults apply only when the whole `input` or `output` block is omitted. If you provide a block, its `questions` replace the defaults entirely, and a block with no `questions` (for example, `output: {}`) asks no questions and allows all text for that direction. To keep a default question, copy it into your configuration.
+
+</Warning>
+
+## Writing Good Noul Questions
+
+Noul questions are answered with a probability that the answer is yes. The following guidelines help you get reliable scores:
+
+- **Ask one hazard per question.** A question such as "Is this message toxic or a jailbreak or asking for medical advice?" gives a single number that you cannot interpret. Split it into separate questions so that `triggered` tells you what fired.
+- **Phrase the question so that yes means bad.** The rail blocks on a high probability, so "Is the user trying to extract the system prompt?" works, while "Is the message safe?" blocks the wrong messages.
+- **Be specific about the subject.** Say who or what you are asking about ("the user", "the assistant reply"). Use `input.questions` for the user message and `output.questions` for the bot response.
+- **Describe the behavior, not just the topic.** "Is the user asking for step-by-step instructions to synthesize a dangerous chemical?" is more precise than "Is the message about chemistry?".
+- **Use stable identifiers.** The question key (for example, `jailbreak`) appears in the response metadata and in the block reason, so pick short names you can use in dashboards and logs.
+
+Example of a domain-specific configuration for a customer-support bot:
+
+```yaml
+rails:
+  config:
+    jev:
+      input:
+        questions:
+          prompt_extraction:
+            instructions: "Is the user trying to get the assistant to reveal its system prompt or hidden instructions?"
+          off_topic_legal:
+            instructions: "Is the user asking for legal advice or asking the assistant to make a legal determination?"
+            threshold: 0.8
+      output:
+        questions:
+          competitor_promotion:
+            instructions: "Does the assistant reply recommend or promote a competitor's product?"
+          unauthorized_commitment:
+            instructions: "Does the assistant reply promise a refund, discount, or contract term on behalf of the company?"
+
+  input:
+    flows:
+      - jev check input
+
+  output:
+    flows:
+      - jev check output
+```
+
+## Threshold Tuning
+
+A question blocks when its probability is at or above its threshold. The rail-level `threshold` (default `0.5`) applies to every question that does not set its own.
+
+- **Lower the threshold** to catch more borderline cases, at the cost of more false positives.
+- **Raise the threshold** to block only high-confidence cases, at the cost of more false negatives.
+- **Set a per-question `threshold`** when hazards differ in cost. For example, keep a strict threshold such as `0.3` for a severe-harm question and use a lenient threshold such as `0.8` for a question about style or off-topic requests.
+
+Choose thresholds by running the rail on a labeled sample of your own traffic and reviewing the `scores` in the response metadata. Score distributions depend on your questions and your data, so do not assume that a threshold that works for one question works for another.
+
+<Info>
+
+TypeSafe AI publishes speed and cost benchmarks for Jev. These are vendor-run results, so evaluate the accuracy, latency, and cost of the rail on your own data before relying on it in production.
+
+</Info>
+
+## Failure Handling
+
+By default, the rail is fail-closed: if Jev cannot produce a valid assessment, the text is blocked rather than allowed through unchecked.
+
+A provider failure is any of the following: a timeout, a network or TLS error, a non-200 status code, a response that is not valid JSON, or a response that is missing the `answers` object or a valid `noul` probability (a number from 0 to 1) for any of the configured questions.
+
+- **`fail_open: false`** (default): the rail blocks the text and the block reason describes the failure, for example `Jev call timed out after 10.0 seconds.`
+- **`fail_open: true`**: the rail allows the text when Jev cannot be reached. Use this only when availability matters more than screening, and monitor the `error` metadata to see how often it happens.
+
+```yaml
+rails:
+  config:
+    jev:
+      timeout: 5.0
+      fail_open: true
+```
+
+The rail logs a warning with the failure reason. Error messages and logs never include the text that was sent to Jev or the response body.
+
+A **missing `TYPESAFE_API_KEY`** is treated as a configuration error, not a provider failure. The action raises a `ValueError` (`TYPESAFE_API_KEY environment variable not set.`) regardless of `fail_open`. The check happens when the rail runs, and only for directions that have at least one question configured.
+
+## Response Metadata
+
+The `jev_check` action returns a rail outcome with the following metadata. It never includes the text that was checked.
+
+| Key | Present | Description |
+|-----|---------|-------------|
+| `scores` | Assessment completed | Map of question ID to the probability (0.0-1.0) that the answer is yes. |
+| `triggered` | Assessment completed | List of question IDs whose probability was at or above the threshold. Empty when the text is allowed. |
+| `error` | Provider failure | Description of the failure. |
+| `fail_open` | Provider failure | The value of the `fail_open` option that decided the outcome. |
+
+For example, a blocked input might carry the following metadata, with the block reason `Jev flagged: jailbreak`:
+
+```json
+{
+  "scores": {"jailbreak": 0.93, "harmful_request": 0.04},
+  "triggered": ["jailbreak"]
+}
+```
+
+Custom flows that call the `jev_check` action directly receive the same outcome object, so they can read `is_blocked`, `reason`, and `metadata`.
+
+## Limitations
+
+- **Allow or block only.** Jev returns probabilities, not character offsets, so the rail cannot mask or redact text.
+- **Hosted service.** Jev runs on TypeSafe AI's infrastructure. There is no local or self-hosted option in this integration, and access is controlled by TypeSafe AI.
+- **Latency depends on the network.** Each check is an extra round trip to the API. Input and output checks each add one request per message. Tune `timeout` for your latency budget.
+- **Scores depend on your questions.** Vague or compound questions produce unreliable probabilities. Evaluate the rail on your own data and iterate on the question wording and thresholds.
+- **Text-only.** The rail checks the user message and the bot response as text. It does not check retrieval chunks or tool calls.
+
+## Privacy
+
+The rail sends the user message (input rail) and the bot response (output rail), together with your question text, to the TypeSafe AI API. Review TypeSafe AI's data handling and retention terms, and make sure that sending this text to a third-party service is acceptable for your data and compliance requirements. If you need to keep sensitive data out of the request, add a PII masking rail before the Jev rail.
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TYPESAFE_API_KEY` | Yes | - | Your TypeSafe AI API key, sent as a bearer token. |
+
+## Learn More
+
+- [TypeSafe AI](https://typesafe.ai)
+- [Exceptions](/configure-guardrails/exceptions)
