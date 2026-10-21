@@ -545,7 +545,7 @@ class TestSurfacesOutsideTheTier:
         assert not missing, f"deny-list names surfaces the catalog does not have: {missing}"
 
     def test_the_input_output_tier_splits_into_servable_and_refused(self):
-        """59 servable -- 41 judging and 18 rewriting -- against the 8 refused, pinned by name.
+        """61 servable -- 43 judging and 18 rewriting -- against the 8 refused, pinned by name.
 
         A predicate would follow the code it is checking; a new manifest surface fails here.
         """
@@ -557,7 +557,7 @@ class TestSurfacesOutsideTheTier:
             bucket.append((direction, name))
 
         assert sorted(refused) == sorted(RETRIEVAL_DEPENDENT_SURFACES | UNSUPPORTED_RAIL_SURFACES)
-        assert len(servable) == 59
+        assert len(servable) == 61
 
     def test_the_rewriting_surfaces_are_all_servable(self):
         """The eighteen this work exists for, nine each way, with no direction half-enabled."""

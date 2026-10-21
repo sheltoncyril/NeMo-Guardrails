@@ -116,6 +116,8 @@ _HTTP_CLIENT_SURFACE_NAMES: frozenset[str] = frozenset(
         # jailbreak_detection
         "jailbreak detection heuristics",
         "jailbreak detection model",
+        "decision model check input",
+        "decision model check output",
         # pangea
         "pangea ai guard input",
         "pangea ai guard output",
